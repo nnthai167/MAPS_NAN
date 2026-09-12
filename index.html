@@ -117,6 +117,9 @@
       <div id="mapLoading" class="absolute inset-0 flex items-center justify-center bg-moss-50/70 pointer-events-none">
         <div class="text-moss-600 text-sm font-medium">Đang tải bản đồ…</div>
       </div>
+      <button id="satelliteBtn" title="Chế độ vệ tinh" class="btn-press absolute right-3 top-3 z-[850] w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center border border-moss-100">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-moss-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.34V5a3 3 0 0 0 3 3v0a2 2 0 0 1 2 2v0a2 2 0 0 0 2 2h1.5a2.5 2.5 0 0 1 2.5 2.5v0"/><path d="M15 19v-1a3 3 0 0 0-3-3v0"/><circle cx="12" cy="12" r="9"/></svg>
+      </button>
     </section>
 
     <!-- List view -->
@@ -145,6 +148,8 @@ let activeFilter = 'all';
 let searchTerm = '';
 let currentTab = 'map';
 let map, clusterGroup;
+let streetLayer, satelliteLayer;
+let isSatellite = false;
 const markerByCode = {};
 
 /* ============ 3. HELPERS ============ */
@@ -182,11 +187,25 @@ function typeMeta(type){
 /* ============ 4. MAP INIT ============ */
 function initMap(){
   map = L.map('map', { zoomControl:false, attributionControl:true }).setView([18.85, 105.35], 9);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+
+  streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
     subdomains: 'abcd',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-  }).addTo(map);
+  });
+
+  satelliteLayer = L.layerGroup([
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+    }),
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      pane: 'shadowPane'
+    })
+  ]);
+
+  streetLayer.addTo(map);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   clusterGroup = L.markerClusterGroup({
@@ -384,6 +403,26 @@ function updateSummary(){
 }
 
 /* ============ 8. GEOLOCATION ============ */
+const satelliteBtn = document.getElementById('satelliteBtn');
+satelliteBtn.addEventListener('click', () => {
+  isSatellite = !isSatellite;
+  if (isSatellite){
+    map.removeLayer(streetLayer);
+    satelliteLayer.addTo(map);
+    satelliteBtn.classList.add('bg-moss-800');
+    satelliteBtn.querySelector('svg').classList.remove('text-moss-700');
+    satelliteBtn.querySelector('svg').classList.add('text-white');
+    showToast('Chế độ vệ tinh');
+  } else {
+    map.removeLayer(satelliteLayer);
+    streetLayer.addTo(map);
+    satelliteBtn.classList.remove('bg-moss-800');
+    satelliteBtn.querySelector('svg').classList.remove('text-white');
+    satelliteBtn.querySelector('svg').classList.add('text-moss-700');
+    showToast('Chế độ bản đồ thường');
+  }
+});
+
 const locateBtn = document.getElementById('locateBtn');
 locateBtn.addEventListener('click', () => {
   if (!navigator.geolocation){
