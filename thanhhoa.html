@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f5132">
+<title>Bản đồ trạm sạc & đổi pin — Thanh Hóa</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Leaflet MarkerCluster -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<!-- SheetJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: '#0b1f16',
+          moss: {50:'#f2f8f4',100:'#dfeee5',200:'#b9dcc6',300:'#8bc4a1',400:'#5aa87c',500:'#398a5f',600:'#286f4a',700:'#20573c',800:'#1b4531',900:'#173a29'},
+          amber: {50:'#fff8ec',100:'#ffedc7',200:'#ffd98a',300:'#ffbd4d',400:'#ffa11f',500:'#f78406',600:'#d86602',700:'#b34d05',800:'#8f3d0b',900:'#75330d'}
+        },
+        fontFamily: {
+          sans: ['"Be Vietnam Pro"','system-ui','-apple-system','Segoe UI','Roboto','sans-serif'],
+        }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  html, body { height: 100%; overscroll-behavior: none; }
+  body { font-family: 'Be Vietnam Pro', system-ui, sans-serif; }
+  #map { height: 100%; width: 100%; background:#e7efe9; }
+  .leaflet-popup-content-wrapper { border-radius: 14px; padding: 0; overflow: hidden; }
+  .leaflet-popup-content { margin: 0; width: 260px !important; }
+  .leaflet-popup-tip { background: #fff; }
+  .station-marker { display:flex; align-items:center; justify-content:center; border-radius: 999px; box-shadow: 0 2px 6px rgba(0,0,0,.35); border: 2px solid #fff; font-size: 15px; }
+  .marker-cluster-custom { background: transparent !important; }
+  .cluster-pill { display:flex; align-items:center; justify-content:center; width:100%; height:100%; border-radius:999px; color:#fff; font-weight:700; font-size:13px; box-shadow:0 2px 8px rgba(0,0,0,.35); border:2px solid #fff; }
+  .tab-underline { position: relative; }
+  .tab-underline.active::after { content:''; position:absolute; left:14%; right:14%; bottom:-1px; height:3px; border-radius:3px; background:#286f4a; }
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background:#c7d9cd; border-radius:4px; }
+  .btn-press:active { transform: scale(0.96); }
+  .chip { transition: all .15s ease; }
+  #locateBtn.locating svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fade-in { animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform:none; } }
+  input[type="file"] { display:none; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+</style>
+</head>
+<body class="bg-moss-50 text-ink">
+
+<div class="flex flex-col h-[100dvh] overflow-hidden">
+
+  <!-- Header -->
+  <header class="shrink-0 bg-moss-800 text-white px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3 shadow-md z-[1000]">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h1 class="text-[17px] font-bold leading-tight truncate">Trạm sạc & đổi pin — Thanh Hóa</h1>
+        <p class="text-[11.5px] text-moss-200 mt-0.5" id="statSummary">Đang tải dữ liệu…</p>
+      </div>
+      <label id="uploadBtn" class="btn-press shrink-0 flex flex-col items-center justify-center w-11 h-11 rounded-full bg-moss-700 active:bg-moss-600 cursor-pointer" title="Tải file Excel/CSV">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-moss-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+      </label>
+    </div>
+
+    <!-- Search -->
+    <div class="mt-3 relative">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-moss-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchInput" type="text" placeholder="Tìm theo mã trạm hoặc tên trạm..."
+        class="w-full bg-moss-900/40 focus:bg-white focus:text-ink placeholder-moss-300 focus:placeholder-gray-400 text-sm rounded-xl pl-9 pr-9 py-2.5 outline-none transition-colors border border-moss-600 focus:border-moss-300"/>
+      <button id="clearSearch" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-moss-300 hover:text-white">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Filter chips -->
+    <div class="mt-2.5 flex items-center gap-2 overflow-x-auto scrollbar-thin -mx-4 px-4 pb-0.5">
+      <button data-filter="all" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-white text-moss-800">Tất cả</button>
+      <button data-filter="charging" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-moss-700 text-moss-100 flex items-center gap-1">⚡ Trạm sạc</button>
+      <button data-filter="swap" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-moss-700 text-moss-100 flex items-center gap-1">🔋 Đổi pin</button>
+      <button id="locateBtn" class="chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-amber-500 text-white flex items-center gap-1 ml-auto">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2"/></svg>
+        Vị trí của tôi
+      </button>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="shrink-0 bg-white border-b border-moss-100 flex text-sm font-semibold z-[900]">
+    <button data-tab="map" class="tab-underline active flex-1 py-3 text-moss-800">🗺️ Bản đồ</button>
+    <button data-tab="list" class="tab-underline flex-1 py-3 text-gray-400">📋 Danh sách trạm</button>
+  </nav>
+
+  <!-- Content -->
+  <main class="relative flex-1 min-h-0">
+
+    <!-- Map view -->
+    <section id="view-map" class="absolute inset-0">
+      <div id="map"></div>
+      <div id="mapLoading" class="absolute inset-0 flex items-center justify-center bg-moss-50/70 pointer-events-none">
+        <div class="text-moss-600 text-sm font-medium">Đang tải bản đồ…</div>
+      </div>
+      <button id="satelliteBtn" title="Chế độ vệ tinh" class="btn-press absolute right-3 top-3 z-[850] w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center border border-moss-100">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-moss-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.34V5a3 3 0 0 0 3 3v0a2 2 0 0 1 2 2v0a2 2 0 0 0 2 2h1.5a2.5 2.5 0 0 1 2.5 2.5v0"/><path d="M15 19v-1a3 3 0 0 0-3-3v0"/><circle cx="12" cy="12" r="9"/></svg>
+      </button>
+    </section>
+
+    <!-- List view -->
+    <section id="view-list" class="absolute inset-0 hidden overflow-y-auto scrollbar-thin bg-moss-50">
+      <div id="listContainer" class="p-3 space-y-2.5 safe-bottom"></div>
+      <div id="listEmpty" class="hidden flex-col items-center justify-center text-center px-8 py-16 text-gray-400">
+        <div class="text-4xl mb-2">🔍</div>
+        <p class="text-sm">Không tìm thấy trạm phù hợp.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-6 bg-ink text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 z-[2000]"></div>
+
+<script>
+/* ============ 1. DỮ LIỆU TRẠM MẶC ĐỊNH (trích xuất từ file Excel Thanh Hóa do người dùng cung cấp) ============ */
+const DEFAULT_STATIONS = [{"code": "B.THO00003", "name": "Trạm đổi pin B.THO00003", "type": "swap", "address": "Đại lý ô tô VinFast, Chevrolet Thanh Hóa, lô 999, đại lộ Hùng Vương, phường Đồng Hải", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.797207, "lng": 105.805023, "count": 2, "cabs": ["BSS-255041001378", "BSS-254941001816"]}, {"code": "B.THO00014", "name": "Trạm đổi pin B.THO00014", "type": "swap", "address": "Ngã 3 đường Âu Cơ và đường Trịnh Kiểm, phường Đông vệ", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.784105, "lng": 105.788109, "count": 1, "cabs": ["BSS-254741000754"]}, {"code": "B.THO00015", "name": "Trạm đổi pin B.THO00015", "type": "swap", "address": "Bãi đỗ xe Trung tâm đăng kiểm xe cơ giới 36-04D, phố 7, phường Quảng Thắng", "ward": "Phường Đông Quang", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.7817, "lng": 105.760201, "count": 1, "cabs": ["BSS-255041000203"]}, {"code": "B.THO00019", "name": "Trạm đổi pin B.THO00019", "type": "swap", "address": "Khách sạn Minh Hạnh, thửa 453, tờ bản đồ số 29, đường Hồ Xuân Hương, thôn Hồng Thắng, phường Quảng Cư", "ward": "Phường Nam Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.757429, "lng": 105.914337, "count": 1, "cabs": ["BSS-254641001088"]}, {"code": "B.THO00023", "name": "Trạm đổi pin B.THO00023", "type": "swap", "address": "Nhà khách Lê Lợi, số 2 đường Lê Lợi, phường Trường Sơn", "ward": "Phường Nam Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.733057, "lng": 105.899303, "count": 1, "cabs": ["BSS-254741000398"]}, {"code": "B.THO00047", "name": "Trạm đổi pin B.THO00047", "type": "swap", "address": "Quốc lộ 45, số 861, đường Nguyễn Trãi, phường Đông Tân", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.813646, "lng": 105.755196, "count": 1, "cabs": ["BSS-254941001617"]}, {"code": "B.THO00049", "name": "Trạm đổi pin B.THO00049", "type": "swap", "address": "Quốc lộ 1A, thôn 1, phường Xuân Lâm", "ward": "Phường Đào Duy Từ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.406166, "lng": 105.752831, "count": 1, "cabs": ["BSS-255041001348"]}, {"code": "B.THO00053", "name": "Trạm đổi pin B.THO00053", "type": "swap", "address": "Khu công nghiệp Bắc Sơn", "ward": "Phường Bỉm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.104268, "lng": 105.862467, "count": 1, "cabs": ["BSS-254941000597"]}, {"code": "B.THO00066", "name": "Trạm đổi pin B.THO00066", "type": "swap", "address": "Vinhomes Star city, cạnh sân chơi Thể thao và cảnh quan Zone 4", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.813491, "lng": 105.805288, "count": 1, "cabs": ["BSS-254441000118"]}, {"code": "B.THO00067", "name": "Trạm đổi pin B.THO00067", "type": "swap", "address": "Vinhomes Star city, cạnh sân chơi Thể thao và cảnh quan Zone 3", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.811684, "lng": 105.805553, "count": 1, "cabs": ["BSS-254441000218"]}, {"code": "B.THO00068", "name": "Trạm đổi pin B.THO00068", "type": "swap", "address": "Vinhomes Star city, bãi đỗ xe Zone 2", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.810193, "lng": 105.803239, "count": 1, "cabs": ["BSS-254441000111"]}, {"code": "B.THO00073", "name": "Trạm đổi pin B.THO00073", "type": "swap", "address": "Bãi đỗ xe ngoài trời, cạnh bể bơi Hoàng Gia, Vinhomes Star city, số 41, đường Võ Chí Công, phường Đông Hải", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.81545, "lng": 105.80182, "count": 1, "cabs": ["BSS-254441000061"]}, {"code": "B.THO00122", "name": "Trạm đổi pin B.THO00122", "type": "swap", "address": "Số 9, đường Hàm Nghi, Đông Hải, Thanh Hóa", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.811678, "lng": 105.805042, "count": 1, "cabs": ["BSS-254441000068"]}, {"code": "B.THO00162", "name": "Trạm đổi pin B.THO00162", "type": "swap", "address": "Đại lộ Lê Lợi, Phường Đông Hương", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.80636, "lng": 105.79351, "count": 2, "cabs": ["BSS-255041000224", "BSS-255041001371"]}, {"code": "B.THO00184", "name": "Trạm đổi pin B.THO00184", "type": "swap", "address": "Nga Yên, Nga Sơn, Thanh Hóa", "ward": "Xã Nga Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.007607, "lng": 105.970116, "count": 1, "cabs": ["BSS-255041000258"]}, {"code": "B.THO00265", "name": "Trạm đổi pin B.THO00265", "type": "swap", "address": "Khu phố Cường Thịnh, Phường Quảng Cư", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.763639, "lng": 105.91124, "count": 1, "cabs": ["BSS-254641022222"]}, {"code": "B.THO00399", "name": "Trạm đổi pin B.THO00399", "type": "swap", "address": "509, Quốc lộ 47B, Yen Truong Commune, Yên Trường,Thanh Hóa", "ward": "Xã Yên Trường", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.010582, "lng": 105.584975, "count": 1, "cabs": ["BSS-254641022531"]}, {"code": "B.THO00476", "name": "Trạm đổi pin B.THO00476", "type": "swap", "address": "KP Thành Phú", "ward": "Xã Yên Định", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.966165, "lng": 105.645262, "count": 1, "cabs": ["BSS-254641022729"]}, {"code": "B.THO00522", "name": "Trạm đổi pin B.THO00522", "type": "swap", "address": "Số 664 Bà Triệu, Phường Hạc Thành, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.813317, "lng": 105.776543, "count": 2, "cabs": ["BSS-254841000475", "BSS-254841000593"]}, {"code": "B.THO00529", "name": "Trạm đổi pin B.THO00529", "type": "swap", "address": "Đường Đại lộ Lê Lợi, Phường Hạc Thành, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.808434, "lng": 105.761818, "count": 2, "cabs": ["BSS-254841000950", "BSS-254941000367"]}, {"code": "B.THO00590", "name": "Trạm đổi pin B.THO00590", "type": "swap", "address": "Tỉnh Thanh Hóa", "ward": "Phường Hàm Rồng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.219459, "lng": 105.490813, "count": 1, "cabs": ["BSS-254641000245"]}, {"code": "B.THO00593", "name": "Trạm đổi pin B.THO00593", "type": "swap", "address": "Tỉnh Thanh Hóa", "ward": "Phường Hàm Rồng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.623933, "lng": 105.65588, "count": 1, "cabs": ["BSS-254441000038"]}, {"code": "B.THO00594", "name": "Trạm đổi pin B.THO00594", "type": "swap", "address": "Tỉnh Thanh Hóa", "ward": "Phường Hàm Rồng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.071149, "lng": 105.386894, "count": 1, "cabs": ["BSS-254641000122"]}, {"code": "B.THO00595", "name": "Trạm đổi pin B.THO00595", "type": "swap", "address": "Sn 86, Tân Ngữ 2, Định Long", "ward": "Xã Yên Định", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.979618, "lng": 105.64463, "count": 1, "cabs": ["BSS-254341000169"]}, {"code": "B.THO00600", "name": "Trạm đổi pin B.THO00600", "type": "swap", "address": "Số 68 Lạc Long Quân, Phường Hạc Thành, Tỉnh Thanh Hóa", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.794913, "lng": 105.785368, "count": 1, "cabs": ["BSS-255041000325"]}, {"code": "B.THO00602", "name": "Trạm đổi pin B.THO00602", "type": "swap", "address": "Số 368 Trần Phú, Phường Hạc Thành, Tỉnh Thanh Hóa", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.802024, "lng": 105.77613, "count": 1, "cabs": ["BSS-255041000241"]}, {"code": "B.THO00603", "name": "Trạm đổi pin B.THO00603", "type": "swap", "address": "Xóm 5 Nga Yên", "ward": "Xã Nga Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.008932, "lng": 105.97122, "count": 1, "cabs": ["BSS-254641000155"]}, {"code": "B.THO00606", "name": "Trạm đổi pin B.THO00606", "type": "swap", "address": "Tỉnh Thanh Hóa", "ward": "Phường Hàm Rồng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.984619, "lng": 105.89973, "count": 1, "cabs": ["BSS-254641000281"]}, {"code": "B.THO10015", "name": "Trạm đổi pin B.THO10015", "type": "swap", "address": "Thửa đất số 228-231-20, tờ bản đồ 04-05, Thôn 1, Phường Đào Duy Từ, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Đào Duy Từ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.408701, "lng": 105.75521, "count": 2, "cabs": ["BSS-254941001042", "BSS-254941000840"]}, {"code": "B.THO10018", "name": "Trạm đổi pin B.THO10018", "type": "swap", "address": "Thửa đất số 407, tờ bản đồ số 7, khu phố 6, Phường Đông Sơn, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.815582, "lng": 105.732069, "count": 1, "cabs": ["BSS-254941002316"]}, {"code": "B.THO10020", "name": "Trạm đổi pin B.THO10020", "type": "swap", "address": "Số 342 và 344 đường Trường Thi, Phường Hạc Thành, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.81173, "lng": 105.7777, "count": 1, "cabs": ["BSS-254941000944"]}, {"code": "B.THO10025", "name": "Trạm đổi pin B.THO10025", "type": "swap", "address": "Số nhà 418, đường Bà Triệu, Phường Hạc Thành, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.820151, "lng": 105.774467, "count": 1, "cabs": ["BSS-254841000576"]}, {"code": "B.THO10230", "name": "Trạm đổi pin B.THO10230", "type": "swap", "address": "Xuân Hồng, Thọ Xuân, Thanh Hóa", "ward": "Phường Hàm Rồng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.935902, "lng": 105.548897, "count": 1, "cabs": ["BSS-254941001164"]}, {"code": "B.THO10291", "name": "Trạm đổi pin B.THO10291", "type": "swap", "address": "Số nhà 308, Đường Tây Sơn,Tổ dân phố Vạn Thắng 1, Phường Đào Duy Từ, Tỉnh Thanh Hóa, Việt Nam", "ward": "Phường Đào Duy Từ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.437188, "lng": 105.773077, "count": 1, "cabs": ["BSS-254941001387"]}, {"code": "B.THO10390", "name": "Trạm đổi pin B.THO10390", "type": "swap", "address": "km18+680, trái tuyến, tỉnh lộ 520 thuộc địa phận thôn Đông Yên", "ward": "Xã Mậu Lâm", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.66269, "lng": 105.58353, "count": 2, "cabs": ["BSS-254641024608", "BSS-255241020654"]}, {"code": "B.THO10392", "name": "Trạm đổi pin B.THO10392", "type": "swap", "address": "km24+480 phải tuyến tỉnh lộ 520, thuộc địa phận Thôn Vân", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.614948, "lng": 105.574288, "count": 1, "cabs": ["BSS-254641024126"]}, {"code": "B.THO10397", "name": "Trạm đổi pin B.THO10397", "type": "swap", "address": "Thôn Tân Hạnh, Phường Đông Sơn, Tỉnh Thanh Hóa", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.799694, "lng": 105.741406, "count": 1, "cabs": ["BSS-255241020356"]}, {"code": "B.THO10482", "name": "Trạm đổi pin B.THO10482", "type": "swap", "address": "Xuân Điền, Như Thanh, Thanh hóa", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.63435, "lng": 105.59603, "count": 2, "cabs": ["BSS-254841000099", "BSS-254841000441"]}, {"code": "B.THO10520", "name": "Trạm đổi pin B.THO10520", "type": "swap", "address": "Sầm Sơn, Thanh Hóa", "ward": "Phường Nam Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.756327, "lng": 105.833366, "count": 2, "cabs": ["BSS-254641024499", "BSS-255241021958"]}, {"code": "B.THO10535", "name": "Trạm đổi pin B.THO10535", "type": "swap", "address": "316 lê lợi,lam sơn,bỉm sơn,thanh hóa", "ward": "Phường Bỉm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.077301, "lng": 105.893336, "count": 1, "cabs": ["BSS-255041000236"]}, {"code": "B.THO11080", "name": "Trạm đổi pin B.THO11080", "type": "swap", "address": "Hoằng Thành, Hoằng Hoá, Thanh Hóa", "ward": "Phường Hạc Thành", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.81036, "lng": 105.847066, "count": 1, "cabs": ["BSS-254741000283"]}, {"code": "B.THO11082", "name": "Trạm đổi pin B.THO11082", "type": "swap", "address": "Vinh Sơn,P. Trường Sơn, Sầm Sơn, Thanh Hóa", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.734146, "lng": 105.879798, "count": 1, "cabs": ["BSS-254741001180"]}, {"code": "B.THO11086", "name": "Trạm đổi pin B.THO11086", "type": "swap", "address": "Nga Văn, Nga Sơn, Thanh Hóa", "ward": "Xã Nga Thắng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.009616, "lng": 105.960229, "count": 1, "cabs": ["BSS-254941000596"]}, {"code": "B.THO11119", "name": "Trạm đổi pin B.THO11119", "type": "swap", "address": "Số nhà 60 đường Tỉnh lộ 502, thôn Phú Văn, phường Đông Tiến, tỉnh Thanh Hoá", "ward": "Phường Đông Tiến", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.867168, "lng": 105.712129, "count": 1, "cabs": ["BSS-255141021993"]}, {"code": "B.THO13270", "name": "Trạm đổi pin B.THO13270", "type": "swap", "address": "thửa đất số 1328, tờ bản đồ sô 19, tổ dân phố Quảng Châu, phường Sầm Sơn, tỉnh Thanh Hóa", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.7463, "lng": 105.872, "count": 2, "cabs": ["BSS-26031641024162", "BSS-26031641023908"]}, {"code": "B.THO11236", "name": "Trạm đổi pin B.THO11236", "type": "swap", "address": "tô dân phố thanh oai - phường đông Sơn- tinh thanh hóa", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.820141, "lng": 105.703098, "count": 1, "cabs": ["BSS-255241022511"]}, {"code": "B.THO11270", "name": "Trạm đổi pin B.THO11270", "type": "swap", "address": "Khu Phố Huệ Sâm, Phường Đông Sơn,Tỉnh Thanh Hóa.( KP Huệ Sâm,  Đông Xuân, Đông Sơn, Thanh Hóa)", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.815074, "lng": 105.721294, "count": 1, "cabs": ["BSS-255241021472"]}, {"code": "B.THO13275", "name": "Trạm đổi pin B.THO13275", "type": "swap", "address": "thửa đất số 168, tờ bản đồ số 9 ,Khu phố 6 ,Đại Hùng, Phường nam sầm sơn ,tỉnh Thanh Hoá", "ward": "Phường Nam Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.723926, "lng": 105.834, "count": 1, "cabs": ["BSS-26031241000294"]}, {"code": "B.THO00007", "name": "Trạm đổi pin B.THO00007", "type": "swap", "address": "Km316+730, quốc lộ 1A, xã Hoằng Quỳ", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.870975, "lng": 105.809822, "count": 1, "cabs": ["BSS-254841001256"]}, {"code": "B.THO00021", "name": "Trạm đổi pin B.THO00021", "type": "swap", "address": "Cửa hàng xăng dầu Hào Bình, khu phố Xuân Lưu, thị trấn Rừng Thông", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.814673, "lng": 105.722458, "count": 1, "cabs": ["BSS-255041001356"]}, {"code": "B.THO00026", "name": "Trạm đổi pin B.THO00026", "type": "swap", "address": "Bãi đỗ xe Trung tâm đăng kiểm xe cơ giới 36-06D, khu phố Ngọc Minh, thị trấn Ngọc Lặc", "ward": "Xã Ngọc Lặc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.104994, "lng": 105.376236, "count": 1, "cabs": ["BSS-254741000444"]}, {"code": "B.THO00044", "name": "Trạm đổi pin B.THO00044", "type": "swap", "address": "Quốc lộ 45, thôn Liên Hưng, xã Thành Hưng", "ward": "Xã Kim Tân", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.122278, "lng": 105.646057, "count": 1, "cabs": ["BSS-254941002027"]}, {"code": "B.THO00056", "name": "Trạm đổi pin B.THO00056", "type": "swap", "address": "Quốc lộ 47, Xã Đồng Khê", "ward": "Phường Đông Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.829159, "lng": 105.672228, "count": 1, "cabs": ["BSS-254941000033"]}, {"code": "B.THO00123", "name": "Trạm đổi pin B.THO00123", "type": "swap", "address": "Kilomet 8+350, trái tuyến, đường Ngã Ba Voi đi Sầm Sơn, xã Quảng Minh", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.732559, "lng": 105.834488, "count": 1, "cabs": ["BSS-254641000740"]}, {"code": "B.THO00131", "name": "Trạm đổi pin B.THO00131", "type": "swap", "address": "Cổng chợ Ligth Land, Xã Hoằng Ngọc", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.847372, "lng": 105.906387, "count": 1, "cabs": ["BSS-255041001335"]}, {"code": "B.THO00133", "name": "Trạm đổi pin B.THO00133", "type": "swap", "address": "Quốc lộ 10, Thôn 5, Xã Hoằng Đức", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.865829, "lng": 105.846214, "count": 1, "cabs": ["BSS-254941001282"]}, {"code": "B.THO00134", "name": "Trạm đổi pin B.THO00134", "type": "swap", "address": "Xã Thành Tâm", "ward": "Xã Lưu Vệ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.11903, "lng": 105.77211, "count": 1, "cabs": ["BSS-255041000227"]}, {"code": "B.THO00164", "name": "Trạm đổi pin B.THO00164", "type": "swap", "address": "Đường Quốc lộ Ven Biển, Xã Quảng Hùng", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.712853, "lng": 105.852669, "count": 1, "cabs": ["BSS-254641022730"]}, {"code": "B.THO00266", "name": "Trạm đổi pin B.THO00266", "type": "swap", "address": "Huyện Yên Định, tỉnh Thanh Hoá", "ward": "Xã Yên Định", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.021603, "lng": 105.595792, "count": 1, "cabs": ["BSS-254641022505"]}, {"code": "B.THO00405", "name": "Trạm đổi pin B.THO00405", "type": "swap", "address": "Xã Thọ Xương, Huyện Thọ Xuân, Tỉnh Thanh Hóa", "ward": "Xã Thọ Xuân", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.91017, "lng": 105.398008, "count": 2, "cabs": ["BSS-254941001165", "BSS-254641023731"]}, {"code": "B.THO00406", "name": "Trạm đổi pin B.THO00406", "type": "swap", "address": "Kiên Thọ Ngọc Lặc", "ward": "Xã Kiên Thọ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.933952, "lng": 105.391876, "count": 1, "cabs": ["BSS-255041001363"]}, {"code": "B.THO00528", "name": "Trạm đổi pin B.THO00528", "type": "swap", "address": "Số 17B Lê Thánh Tông, Xã Ngọc Lặc, Tỉnh Thanh Hóa, Việt Nam", "ward": "Xã Ngọc Lặc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.082314, "lng": 105.37947, "count": 1, "cabs": ["BSS-254741000940"]}, {"code": "B.THO00592", "name": "Trạm đổi pin B.THO00592", "type": "swap", "address": "Quốc lộ 45, Xã Kim Tân, Tỉnh Thanh Hóa", "ward": "Xã Kim Tân", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.138102, "lng": 105.685632, "count": 1, "cabs": ["BSS-254941001800"]}, {"code": "B.THO00598", "name": "Trạm đổi pin B.THO00598", "type": "swap", "address": "Phố Neo, Xã Thọ Long, Tỉnh Thanh Hoá", "ward": "Xã Thọ Long", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.911603, "lng": 105.540302, "count": 1, "cabs": ["BSS-254841001411"]}, {"code": "B.THO00607", "name": "Trạm đổi pin B.THO00607", "type": "swap", "address": "305-307 QL1A, Xã Hoằng Hóa, Tỉnh Thanh Hóa", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.85021, "lng": 105.84802, "count": 1, "cabs": ["BSS-255041000223"]}, {"code": "B.THO10019", "name": "Trạm đổi pin B.THO10019", "type": "swap", "address": "Thửa đất số 99, bản đồ số 6, phố Kiểu, Xã Yên Trường, Tỉnh Thanh Hóa, Việt Nam", "ward": "Xã Yên Trường", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.022282, "lng": 105.59427, "count": 1, "cabs": ["BSS-254941000681"]}, {"code": "B.THO10229", "name": "Trạm đổi pin B.THO10229", "type": "swap", "address": "Xuân Hồng, Thọ Xuân, Thanh Hóa", "ward": "Phường Hàm Rồng", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.925764, "lng": 105.562782, "count": 1, "cabs": ["BSS-255041001644"]}, {"code": "B.THO10264", "name": "Trạm đổi pin B.THO10264", "type": "swap", "address": "xã Thúy Sơn, Ngọc lặc, Thanh Hóa", "ward": "Xã Ngọc Lặc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.124793, "lng": 105.34285, "count": 1, "cabs": ["BSS-254841000195"]}, {"code": "B.THO10319", "name": "Trạm đổi pin B.THO10319", "type": "swap", "address": "Thửa đất số 1197, Tờ Bản Đồ số 11, Thôn Minh Thiện, Xã Quảng Minh, Thành Phố Sầm Sơn, Thanh Hóa", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.732025, "lng": 105.839763, "count": 1, "cabs": ["BSS-255141022516"]}, {"code": "B.THO10364", "name": "Trạm đổi pin B.THO10364", "type": "swap", "address": "ngã tư đg 39, gần đối diện trg tiểu học Đông Tiến", "ward": "Phường Đông Tiến", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.83474, "lng": 105.70909, "count": 1, "cabs": ["BSS-255041001504"]}, {"code": "B.THO10385", "name": "Trạm đổi pin B.THO10385", "type": "swap", "address": "Thôn Ngoại 1, Xã Hồ Vương, Tiinhr Thanh Hóa", "ward": "Xã Hồ Vương", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.02727, "lng": 105.982453, "count": 2, "cabs": ["BSS-255241020470", "BSS-255241020648"]}, {"code": "B.THO10386", "name": "Trạm đổi pin B.THO10386", "type": "swap", "address": "thôn Xuân Phong, xã Như Thanh, tỉnh Thanh Hóa", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.629658, "lng": 105.575414, "count": 1, "cabs": ["BSS-254841001371"]}, {"code": "B.THO10391", "name": "Trạm đổi pin B.THO10391", "type": "swap", "address": "Km3+900, phải tuyến đường nối quốc lộ 45 đi tỉnh lộ 505", "ward": "Xã Yên Thọ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.60305, "lng": 105.6056, "count": 3, "cabs": ["BSS-255141021611", "BSS-255141022503", "BSS-255241021280"]}, {"code": "B.THO10415", "name": "Trạm đổi pin B.THO10415", "type": "swap", "address": "xã Kiên Thọ, tỉnh Thanh Hóa", "ward": "Xã Kiên Thọ", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.96569, "lng": 105.39836, "count": 2, "cabs": ["BSS-254841000448", "BSS-254841000767"]}, {"code": "B.THO10476", "name": "Trạm đổi pin B.THO10476", "type": "swap", "address": "Thôn: Man Thôn, xã Thọ Phú, tỉnh Thanh Hoá", "ward": "Xã Thọ Phú", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.88328, "lng": 105.58315, "count": 1, "cabs": ["BSS-254841000708"]}, {"code": "B.THO10478", "name": "Trạm đổi pin B.THO10478", "type": "swap", "address": "Xã Thọ Phú , Tỉnh Thanh Hóa", "ward": "Xã Thọ Phú", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.853292, "lng": 105.57412, "count": 1, "cabs": ["BSS-254841000570"]}, {"code": "B.THO10480", "name": "Trạm đổi pin B.THO10480", "type": "swap", "address": "Xã Thọ Phú , Tỉnh Thanh Hóa", "ward": "Xã Thọ Phú", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.85214, "lng": 105.57774, "count": 1, "cabs": ["BSS-254841000637"]}, {"code": "B.THO10310", "name": "Trạm đổi pin B.THO10310", "type": "swap", "address": "Hoằng Hoá, Thanh Hóa, Việt Nam", "ward": "Xã Hoằng Lộc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.80896, "lng": 105.84588, "count": 1, "cabs": ["BSS-254741000912"]}, {"code": "B.THO10481", "name": "Trạm đổi pin B.THO10481", "type": "swap", "address": "407 Thôn 3, Xã NHư Thanh, Thanh Hóa", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.636335, "lng": 105.577882, "count": 2, "cabs": ["BSS-254841000020", "BSS-254841000032"]}, {"code": "B.THO10538", "name": "Trạm đổi pin B.THO10538", "type": "swap", "address": "447 trần phú,lam sơn, bỉm sơn, thanh hóa", "ward": "Phường Bỉm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.07309, "lng": 105.88049, "count": 1, "cabs": ["BSS-255041001294"]}, {"code": "B.THO10547", "name": "Trạm đổi pin B.THO10547", "type": "swap", "address": "Thị Trấn Bến Sung, Như Thanh, Thanh Hóa", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.632441, "lng": 105.577691, "count": 1, "cabs": ["BSS-254941002036"]}, {"code": "B.THO10548", "name": "Trạm đổi pin B.THO10548", "type": "swap", "address": "Thị Trấn Bến Sung, Như Thanh, Thanh Hóa", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.657417, "lng": 105.578381, "count": 1, "cabs": ["BSS-254941002030"]}, {"code": "B.THO11169", "name": "Trạm đổi pin B.THO11169", "type": "swap", "address": "Thôn nghĩa Hưng , Hoằng Xuân , Hoằng Hoá , Thanh Hoá", "ward": "Xã Hoằng Giang", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.91188, "lng": 105.771736, "count": 1, "cabs": ["BSS-255241021775"]}, {"code": "B.THO11221", "name": "Trạm đổi pin B.THO11221", "type": "swap", "address": "Yên Định, Thanh Hóa, Việt Nam", "ward": "Xã Yên Định", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.015949, "lng": 105.564341, "count": 1, "cabs": ["BSS-255141022488"]}, {"code": "B.THO11269", "name": "Trạm đổi pin B.THO11269", "type": "swap", "address": "Thôn 4, Xã Hoàng Thanh, Tỉnh Thanh Hóa. ( Thôn 4, Xã Hoàng Ngọc,huyện Hoàng Hóa, Tỉnh Thanh Hóa)", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.84761, "lng": 105.903608, "count": 1, "cabs": ["BSS-255141020496"]}, {"code": "B.THO11271", "name": "Trạm đổi pin B.THO11271", "type": "swap", "address": "SN :09,Đường HH 30,  Phố Vinh Sơn I, xã Hoằng Hoá, tỉnh Thanh Hoá.(SN :09, Đường HH 30, xã Hoàng Thành, huyện Hoằng Hoá, tỉnh Thanh Hoá. )", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.854477, "lng": 105.853483, "count": 1, "cabs": ["BSS-255141021119"]}, {"code": "B.THO11273", "name": "Trạm đổi pin B.THO11273", "type": "swap", "address": "Thôn Cà Phê 3, Xã Yên Định, Tỉnh Thanh Hoá.( Khu Pố 3/2 , Thị trấn Thống Nhất,  huyện Yên Định, Tỉnh Thanh Hoá)", "ward": "Xã Yên Định", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.030047, "lng": 105.507053, "count": 2, "cabs": ["BSS-255141020225", "BSS-255141020912"]}, {"code": "B.THO11280", "name": "Trạm đổi pin B.THO11280", "type": "swap", "address": "Thôn Hoa Phú, Xã Hoa Lộc, Tỉnh Thanh Hóa.(Thôn Hoa Phú, Hoa Lộc, Hậu Lộc,Thanh Hóa.)", "ward": "Xã Hoa Lộc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.930953, "lng": 105.910137, "count": 2, "cabs": ["BSS-254641023840", "BSS-255241022386"]}, {"code": "B.THO11288", "name": "Trạm đổi pin B.THO11288", "type": "swap", "address": "Khu dân cư Bắc Sông Hưng Long tiểu khu 3 thị trấn Nga Sơn cũ nay là thôn Thịnh Vượng, xã Nga Sơn, Thanh hóa", "ward": "Xã Nga Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.008508, "lng": 105.977487, "count": 1, "cabs": ["BSS-255241022607"]}, {"code": "B.THO11298", "name": "Trạm đổi pin B.THO11298", "type": "swap", "address": "Thửa đất số 810, tờ bản đồ số 12, Thôn 2, Xã Quảng Hùng, Thành Phố Sầm Sơn, Tỉnh Thanh Hóa", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.713123, "lng": 105.85094, "count": 1, "cabs": ["BSS-254641025428"]}, {"code": "B.THO11314", "name": "Trạm đổi pin B.THO11314", "type": "swap", "address": "Thửa đất số 284, tờ bản đồ số 1, Thôn 3, xã Quảng Minh, Quảng Xương, Thanh Hóa", "ward": "Phường Nam Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.726838, "lng": 105.852134, "count": 1, "cabs": ["BSS-254641024739"]}, {"code": "B.THO11952", "name": "Trạm đổi pin B.THO11952", "type": "swap", "address": "Thị trấn Thống Nhất huyện Yên Định", "ward": "Xã Yên Trường", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.036935, "lng": 105.500565, "count": 1, "cabs": ["BSS-26020141020598"]}, {"code": "B.THO11954", "name": "Trạm đổi pin B.THO11954", "type": "swap", "address": "Phố Kiểu, Yên Trường huyện Yên Định", "ward": "Xã Như Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.023082, "lng": 105.590802, "count": 1, "cabs": ["BSS-26020141020843"]}, {"code": "B.THO11956", "name": "Trạm đổi pin B.THO11956", "type": "swap", "address": "Yên Lạc, huyện Yên Định", "ward": "Xã Yên Định", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.96783, "lng": 105.59852, "count": 1, "cabs": ["BSS-26020141020586"]}, {"code": "B.THO11958", "name": "Trạm đổi pin B.THO11958", "type": "swap", "address": "Yên Giang, huyện Yên Định", "ward": "Xã Yên Phú", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.013701, "lng": 105.5272, "count": 2, "cabs": ["BSS-26020141020846", "BSS-26020141020856"]}, {"code": "B.THO11978", "name": "Trạm đổi pin B.THO11978", "type": "swap", "address": "Đồng Lợi, huyện Triệu Sơn", "ward": "Xã Đồng Tiến", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.763431, "lng": 105.665472, "count": 2, "cabs": ["BSS-26031641021117", "BSS-26031641021592"]}, {"code": "B.THO10387", "name": "Trạm đổi pin B.THO10387", "type": "swap", "address": "Thôn Bắc Sơn, Xã Nga An", "ward": "Xã Nga An", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.040471, "lng": 106.016881, "count": 2, "cabs": ["BSS-255241021381", "BSS-255241022509"]}, {"code": "B.THO12287", "name": "Trạm đổi pin B.THO12287", "type": "swap", "address": "Số nhà 153, đường Thu Hồng, phố Công Vinh, Phường Sầm Sơn, Thanh Hoá", "ward": "Phường Sầm Sơn", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.758747, "lng": 105.903331, "count": 1, "cabs": ["BSS-255241021235"]}, {"code": "B.THO12067", "name": "Trạm đổi pin B.THO12067", "type": "swap", "address": "Thành Hưng, huyện Thạch Thành", "ward": "Xã Kim Tân", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.12384, "lng": 105.65141, "count": 1, "cabs": ["BSS-26030941000137"]}, {"code": "B.THO12179", "name": "Trạm đổi pin B.THO12179", "type": "swap", "address": "Thị Trấn Bút Sơn, huyện Hoằng Hóa", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.849768, "lng": 105.853753, "count": 1, "cabs": ["BSS-26020141021600"]}, {"code": "B.THO12189", "name": "Trạm đổi pin B.THO12189", "type": "swap", "address": "Hoằng Hợp, huyện Hoằng Hóa", "ward": "Xã Hoằng Giang", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.877239, "lng": 105.784198, "count": 1, "cabs": ["BSS-26030941000139"]}, {"code": "B.THO12191", "name": "Trạm đổi pin B.THO12191", "type": "swap", "address": "Hoằng Phú, Huyện Hoằng Hóa", "ward": "Xã Hoằng Phú", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.895978, "lng": 105.79937, "count": 2, "cabs": ["BSS-26020141021230", "BSS-26020141021251"]}, {"code": "B.THO12198", "name": "Trạm đổi pin B.THO12198", "type": "swap", "address": "Hoa Lộc huyện Hậu Lộc", "ward": "Xã Hoa Lộc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.932122, "lng": 105.915463, "count": 1, "cabs": ["BSS-26030941000379"]}, {"code": "B.THO12214", "name": "Trạm đổi pin B.THO12214", "type": "swap", "address": "Liên Lộc huyện Hậu Lộc", "ward": "Xã Hoa Lộc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.944939, "lng": 105.92087, "count": 1, "cabs": ["BSS-26031641000679"]}, {"code": "B.THO12219", "name": "Trạm đổi pin B.THO12219", "type": "swap", "address": "Tiều Khu 6, thị trấn Hà Trung huyện Hà Trung", "ward": "Xã Hà Trung", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.01796, "lng": 105.849318, "count": 2, "cabs": ["BSS-26020141020580", "BSS-26020141020831"]}, {"code": "B.THO12224", "name": "Trạm đổi pin B.THO12224", "type": "swap", "address": "Thị trấn Hà Trung huyện Hà Trung (Cũ)", "ward": "Xã Hà Trung", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.017421, "lng": 105.85058, "count": 2, "cabs": ["BSS-26020141022230", "BSS-26031641021912"]}, {"code": "B.THO12227", "name": "Trạm đổi pin B.THO12227", "type": "swap", "address": "Hà Châu, huyện Hà Trung", "ward": "Xã Lĩnh Toại", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 20.017669, "lng": 105.904971, "count": 1, "cabs": ["BSS-26031641021677"]}, {"code": "B.THO12386", "name": "Trạm đổi pin B.THO12386", "type": "swap", "address": "Lô Số A12+13, Khu Dân Cư Sau Thuế, TDP Trung Sơn,", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.848123, "lng": 105.856234, "count": 1, "cabs": ["BSS-26031641000844"]}, {"code": "B.THO12391", "name": "Trạm đổi pin B.THO12391", "type": "swap", "address": "Sn 102 đường ĐHHH 18 , phố Hoằng Lọc, xã Hoằng Hóa, Thanh Hóa", "ward": "Xã Hoằng Hóa", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.86007, "lng": 105.8564, "count": 1, "cabs": ["BSS-255241021359"]}, {"code": "B.THO12393", "name": "Trạm đổi pin B.THO12393", "type": "swap", "address": "Thôn Đình Bảng, xã Hoằng Lộc, tỉnh Thanh Hoá", "ward": "Xã Hoằng Lộc", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.81574, "lng": 105.8467, "count": 2, "cabs": ["BSS-255041001447", "BSS-255141020374"]}, {"code": "B.THO13168", "name": "Trạm đổi pin B.THO13168", "type": "swap", "address": "Thửa đất số 144, Tờ bản đồ số 09, Thôn 5, xã Hoằng Thanh, tỉnh Thanh Hóa", "ward": "Xã Hoằng Thanh", "district": "", "province": "Tỉnh Thanh Hoá", "lat": 19.843323, "lng": 105.902618, "count": 1, "cabs": ["BSS-26031641021937"]}];
+
+/* ============ 2. STATE ============ */
+let stations = DEFAULT_STATIONS.map(s => ({...s}));
+let userPos = null;
+let activeFilter = 'all';
+let searchTerm = '';
+let currentTab = 'map';
+let map, clusterGroup;
+let streetLayer, satelliteLayer;
+let isSatellite = false;
+const markerByCode = {};
+
+/* ============ 3. HELPERS ============ */
+function stripDiacritics(str){
+  return (str||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase();
+}
+function haversine(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function formatDistance(km){
+  if (km == null) return '';
+  if (km < 1) return Math.round(km*1000) + ' m';
+  return km.toFixed(1) + ' km';
+}
+function gmapsUrl(lat, lng){
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+function showToast(msg, duration=2200){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(()=>{ t.style.opacity='0'; }, duration);
+}
+function typeMeta(type){
+  return type === 'swap'
+    ? { label: 'Trạm đổi pin', emoji: '🔋', color: '#d86602', bg:'bg-amber-50', text:'text-amber-700', ring:'ring-amber-200' }
+    : { label: 'Trạm sạc', emoji: '⚡', color: '#20573c', bg:'bg-moss-50', text:'text-moss-700', ring:'ring-moss-200' };
+}
+
+/* ============ 4. MAP INIT ============ */
+function initMap(){
+  map = L.map('map', { zoomControl:false, attributionControl:true }).setView([19.86, 105.74], 9);
+
+  streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  });
+
+  satelliteLayer = L.layerGroup([
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+    }),
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      pane: 'shadowPane'
+    })
+  ]);
+
+  streetLayer.addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 50,
+    iconCreateFunction: function(cluster){
+      const count = cluster.getChildCount();
+      const size = count < 10 ? 34 : count < 30 ? 40 : 48;
+      return L.divIcon({
+        html: `<div class="cluster-pill" style="background:#20573c;">${count}</div>`,
+        className: 'marker-cluster-custom',
+        iconSize: [size, size]
+      });
+    }
+  });
+  map.addLayer(clusterGroup);
+  document.getElementById('mapLoading').remove();
+}
+
+function makeIcon(type){
+  const meta = typeMeta(type);
+  return L.divIcon({
+    html: `<div class="station-marker" style="width:30px;height:30px;background:${meta.color};">${meta.emoji}</div>`,
+    className: '',
+    iconSize: [30,30],
+    iconAnchor: [15,15],
+    popupAnchor: [0,-14]
+  });
+}
+
+function popupHtml(s){
+  const meta = typeMeta(s.type);
+  return `
+    <div class="p-3.5">
+      <div class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5" style="background:${s.type==='swap'?'#fff3e0':'#e9f4ee'};color:${meta.color}">
+        ${meta.emoji} ${meta.label}
+      </div>
+      <div class="text-xs text-gray-400 font-medium">${s.code}</div>
+      <div class="font-bold text-[14px] leading-snug text-ink mt-0.5">${s.name || '(Chưa có tên)'}</div>
+      <div class="text-[12.5px] text-gray-500 mt-1 leading-snug">${s.address || ''}</div>
+      <div class="text-[11.5px] text-gray-400 mt-1 font-medium">${s.ward?('📍 '+s.ward+' · '):''}🔋 ${s.count} tủ</div>
+      ${(s.cabs&&s.cabs.length)?`<div class="text-[11px] text-gray-400 mt-1 leading-snug break-words">Tủ: ${s.cabs.join(', ')}</div>`:''}
+      <a href="${gmapsUrl(s.lat,s.lng)}" target="_blank" rel="noopener"
+        class="mt-3 flex items-center justify-center gap-1.5 w-full text-white text-[13px] font-semibold py-2 rounded-lg"
+        style="background:${meta.color}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        Chỉ đường Google Maps
+      </a>
+    </div>`;
+}
+
+function rebuildMarkers(){
+  clusterGroup.clearLayers();
+  for (const key in markerByCode) delete markerByCode[key];
+  const filtered = getFilteredStations();
+  filtered.forEach(s => {
+    if (typeof s.lat !== 'number' || typeof s.lng !== 'number') return;
+    const marker = L.marker([s.lat, s.lng], { icon: makeIcon(s.type) });
+    marker.bindPopup(popupHtml(s));
+    marker.stationCode = s.code;
+    markerByCode[s.code] = marker;
+    clusterGroup.addLayer(marker);
+  });
+}
+
+function focusStation(code){
+  const s = stations.find(x => x.code === code);
+  if (!s) return;
+  currentTab = 'map';
+  applyTabUI();
+  map.setView([s.lat, s.lng], 16, { animate: true });
+  setTimeout(() => {
+    const m = markerByCode[code];
+    if (m) m.openPopup();
+  }, 300);
+}
+
+/* ============ 5. FILTER / SEARCH ============ */
+function getFilteredStations(){
+  let list = stations.filter(s => typeof s.lat === 'number' && typeof s.lng === 'number');
+  if (activeFilter !== 'all') list = list.filter(s => s.type === activeFilter);
+  if (searchTerm){
+    const q = stripDiacritics(searchTerm);
+    list = list.filter(s => stripDiacritics(s.code).includes(q) || stripDiacritics(s.name).includes(q) || stripDiacritics(s.address).includes(q));
+  }
+  if (userPos){
+    list = list.map(s => ({...s, _dist: haversine(userPos.lat, userPos.lng, s.lat, s.lng)}));
+    list.sort((a,b) => a._dist - b._dist);
+  } else {
+    list = list.map(s => ({...s, _dist: null}));
+  }
+  return list;
+}
+
+/* ============ 6. LIST RENDER ============ */
+function renderList(){
+  const container = document.getElementById('listContainer');
+  const empty = document.getElementById('listEmpty');
+  const list = getFilteredStations();
+
+  if (list.length === 0){
+    container.innerHTML = '';
+    empty.classList.remove('hidden');
+    empty.classList.add('flex');
+    return;
+  }
+  empty.classList.add('hidden');
+  empty.classList.remove('flex');
+
+  container.innerHTML = list.map(s => {
+    const meta = typeMeta(s.type);
+    return `
+    <div class="fade-in bg-white rounded-2xl p-3.5 shadow-sm ring-1 ${meta.ring} flex flex-col gap-2" data-code="${s.code}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.bg} ${meta.text}">${meta.emoji} ${meta.label}</span>
+            ${s._dist != null ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">📍 ${formatDistance(s._dist)}</span>` : ''}
+          </div>
+          <div class="text-[11px] text-gray-400 font-medium mt-1">${s.code}</div>
+          <div class="font-bold text-[14.5px] text-ink leading-snug mt-0.5">${s.name || '(Chưa có tên)'}</div>
+          <div class="text-[12.5px] text-gray-500 leading-snug mt-0.5">${s.address || ''}</div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-0.5">
+        <button class="btn-press view-on-map-btn flex-1 text-[12.5px] font-semibold py-2 rounded-lg bg-moss-50 text-moss-800 flex items-center justify-center gap-1" data-code="${s.code}">
+          🗺️ Xem trên bản đồ
+        </button>
+        <a href="${gmapsUrl(s.lat,s.lng)}" target="_blank" rel="noopener" class="btn-press flex-1 text-[12.5px] font-semibold py-2 rounded-lg text-white text-center flex items-center justify-center gap-1" style="background:${meta.color}">
+          🧭 Chỉ đường
+        </a>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.view-on-map-btn').forEach(btn => {
+    btn.addEventListener('click', () => focusStation(btn.dataset.code));
+  });
+}
+
+/* ============ 7. UI: TABS / CHIPS / SEARCH ============ */
+function applyTabUI(){
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    const active = btn.dataset.tab === currentTab;
+    btn.classList.toggle('active', active);
+    btn.classList.toggle('text-moss-800', active);
+    btn.classList.toggle('text-gray-400', !active);
+  });
+  document.getElementById('view-map').classList.toggle('hidden', currentTab !== 'map');
+  document.getElementById('view-list').classList.toggle('hidden', currentTab !== 'list');
+  if (currentTab === 'map') setTimeout(() => map.invalidateSize(), 50);
+  if (currentTab === 'list') renderList();
+}
+
+document.querySelectorAll('[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => { currentTab = btn.dataset.tab; applyTabUI(); });
+});
+
+document.querySelectorAll('.chip-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeFilter = btn.dataset.filter;
+    document.querySelectorAll('.chip-filter').forEach(b => {
+      const on = b === btn;
+      b.classList.toggle('bg-white', on);
+      b.classList.toggle('text-moss-800', on);
+      b.classList.toggle('bg-moss-700', !on);
+      b.classList.toggle('text-moss-100', !on);
+    });
+    rebuildMarkers();
+    if (currentTab === 'list') renderList();
+    updateSummary();
+  });
+});
+
+const searchInput = document.getElementById('searchInput');
+const clearSearchBtn = document.getElementById('clearSearch');
+searchInput.addEventListener('input', () => {
+  searchTerm = searchInput.value.trim();
+  clearSearchBtn.classList.toggle('hidden', !searchTerm);
+  rebuildMarkers();
+  if (currentTab === 'list') renderList();
+  updateSummary();
+});
+clearSearchBtn.addEventListener('click', () => {
+  searchInput.value = ''; searchTerm = '';
+  clearSearchBtn.classList.add('hidden');
+  rebuildMarkers();
+  if (currentTab === 'list') renderList();
+  updateSummary();
+});
+
+function updateSummary(){
+  const list = getFilteredStations();
+  const charging = stations.filter(s=>s.type==='charging').length;
+  const swap = stations.filter(s=>s.type==='swap').length;
+  document.getElementById('statSummary').textContent =
+    `${list.length}/${stations.length} trạm hiển thị · ⚡ ${charging} trạm sạc · 🔋 ${swap} trạm đổi pin`;
+}
+
+/* ============ 8. GEOLOCATION ============ */
+const satelliteBtn = document.getElementById('satelliteBtn');
+satelliteBtn.addEventListener('click', () => {
+  isSatellite = !isSatellite;
+  if (isSatellite){
+    map.removeLayer(streetLayer);
+    satelliteLayer.addTo(map);
+    satelliteBtn.classList.add('bg-moss-800');
+    satelliteBtn.querySelector('svg').classList.remove('text-moss-700');
+    satelliteBtn.querySelector('svg').classList.add('text-white');
+    showToast('Chế độ vệ tinh');
+  } else {
+    map.removeLayer(satelliteLayer);
+    streetLayer.addTo(map);
+    satelliteBtn.classList.remove('bg-moss-800');
+    satelliteBtn.querySelector('svg').classList.remove('text-white');
+    satelliteBtn.querySelector('svg').classList.add('text-moss-700');
+    showToast('Chế độ bản đồ thường');
+  }
+});
+
+const locateBtn = document.getElementById('locateBtn');
+locateBtn.addEventListener('click', () => {
+  if (!navigator.geolocation){
+    showToast('Trình duyệt không hỗ trợ định vị GPS');
+    return;
+  }
+  locateBtn.classList.add('locating');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      locateBtn.classList.remove('locating');
+      showToast('Đã lấy vị trí — danh sách đã sắp xếp theo khoảng cách');
+
+      if (window._userMarker) map.removeLayer(window._userMarker);
+      window._userMarker = L.circleMarker([userPos.lat, userPos.lng], {
+        radius: 8, color:'#fff', weight:3, fillColor:'#2563eb', fillOpacity:1
+      }).addTo(map).bindPopup('Vị trí của bạn');
+      map.setView([userPos.lat, userPos.lng], 13);
+
+      renderList();
+      currentTab = 'list';
+      applyTabUI();
+    },
+    err => {
+      locateBtn.classList.remove('locating');
+      showToast('Không thể lấy vị trí: ' + (err.message || 'đã từ chối quyền truy cập'));
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+/* ============ 9. IMPORT EXCEL/CSV (SheetJS) ============ */
+const NAME_MAP = {
+  code: ['ma tram','matram','code','ma_tram','station code','station_code','id'],
+  name: ['ten tram','tentram','name','ten_tram','station name'],
+  address: ['dia chi','diachi','address'],
+  lat: ['lat','latitude','vi do','vido'],
+  lng: ['lng','lon','long','longitude','kinh do','kinhdo'],
+  type: ['loai','type','loai tram']
+};
+function matchColumn(headers, keys){
+  const normHeaders = headers.map(h => stripDiacritics(String(h||'')).replace(/[^a-z0-9]/g,''));
+  for (const key of keys){
+    const normKey = stripDiacritics(key).replace(/[^a-z0-9]/g,'');
+    const idx = normHeaders.findIndex(h => h === normKey || h.includes(normKey));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try {
+      const wb = XLSX.read(evt.target.result, { type: 'binary' });
+      const firstSheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+      if (rows.length < 2) { showToast('File không có dữ liệu'); return; }
+
+      const headers = rows[0];
+      const idxCode = matchColumn(headers, NAME_MAP.code);
+      const idxName = matchColumn(headers, NAME_MAP.name);
+      const idxAddr = matchColumn(headers, NAME_MAP.address);
+      const idxLat = matchColumn(headers, NAME_MAP.lat);
+      const idxLng = matchColumn(headers, NAME_MAP.lng);
+      const idxType = matchColumn(headers, NAME_MAP.type);
+
+      if (idxLat === -1 || idxLng === -1){
+        showToast('Không tìm thấy cột Lat/Lng trong file');
+        return;
+      }
+
+      const imported = [];
+      for (let i = 1; i < rows.length; i++){
+        const r = rows[i];
+        const lat = parseFloat(r[idxLat]);
+        const lng = parseFloat(r[idxLng]);
+        if (isNaN(lat) || isNaN(lng)) continue;
+        imported.push({
+          code: idxCode !== -1 ? String(r[idxCode]) : `ROW-${i}`,
+          name: idxName !== -1 ? String(r[idxName]) : '',
+          address: idxAddr !== -1 ? String(r[idxAddr]) : '',
+          type: idxType !== -1 && stripDiacritics(String(r[idxType])).includes('doi pin') ? 'swap' : 'charging',
+          lat, lng, count: 1
+        });
+      }
+
+      if (imported.length === 0){
+        showToast('Không đọc được trạm hợp lệ nào từ file');
+        return;
+      }
+
+      stations = imported;
+      userPos = null;
+      searchInput.value = ''; searchTerm = '';
+      activeFilter = 'all';
+      document.querySelectorAll('.chip-filter').forEach(b => {
+        const on = b.dataset.filter === 'all';
+        b.classList.toggle('bg-white', on);
+        b.classList.toggle('text-moss-800', on);
+        b.classList.toggle('bg-moss-700', !on);
+        b.classList.toggle('text-moss-100', !on);
+      });
+
+      rebuildMarkers();
+      renderList();
+      updateSummary();
+      if (stations.length){
+        const bounds = L.latLngBounds(stations.map(s => [s.lat, s.lng]));
+        map.fitBounds(bounds, { padding: [30,30] });
+      }
+      showToast(`Đã tải ${imported.length} trạm từ file`);
+    } catch(err){
+      console.error(err);
+      showToast('Lỗi khi đọc file: định dạng không hợp lệ');
+    }
+  };
+  reader.readAsBinaryString(file);
+  e.target.value = '';
+});
+
+/* ============ 10. INIT ============ */
+initMap();
+rebuildMarkers();
+updateSummary();
+applyTabUI();
+</script>
+</body>
+</html>
