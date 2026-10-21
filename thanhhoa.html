@@ -74,10 +74,13 @@
         <h1 class="text-[17px] font-bold leading-tight truncate">Trạm sạc & đổi pin — Thanh Hóa</h1>
         <p class="text-[11.5px] text-moss-200 mt-0.5" id="statSummary">Đang tải dữ liệu…</p>
       </div>
-      <label id="uploadBtn" class="btn-press shrink-0 flex flex-col items-center justify-center w-11 h-11 rounded-full bg-moss-700 active:bg-moss-600 cursor-pointer" title="Tải file Excel/CSV">
+      <div class="shrink-0 flex items-center gap-2">
+      <button id="statusBtn" class="btn-press flex items-center justify-center h-11 px-3.5 gap-1.5 rounded-full bg-amber-500 active:bg-amber-600 text-white text-[12.5px] font-bold" title="Cập nhật trạng thái hoàn thành">🔄 Cập nhật</button>
+      <label id="uploadBtn" class="btn-press flex flex-col items-center justify-center w-11 h-11 rounded-full bg-moss-700 active:bg-moss-600 cursor-pointer" title="Tải file Excel/CSV">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-moss-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
         <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
       </label>
+      </div>
     </div>
 
     <!-- Search -->
@@ -93,8 +96,8 @@
     <!-- Filter chips -->
     <div class="mt-2.5 flex items-center gap-2 overflow-x-auto scrollbar-thin -mx-4 px-4 pb-0.5">
       <button data-filter="all" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-white text-moss-800">Tất cả</button>
-      <button data-filter="charging" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-moss-700 text-moss-100 flex items-center gap-1">⚡ Trạm sạc</button>
-      <button data-filter="swap" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-moss-700 text-moss-100 flex items-center gap-1">🔋 Đổi pin</button>
+      <button data-filter="done" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-moss-700 text-moss-100 flex items-center gap-1">✅ Hoàn thành</button>
+      <button data-filter="pending" class="chip-filter chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-moss-700 text-moss-100 flex items-center gap-1">⏳ Còn lại</button>
       <button id="locateBtn" class="chip shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-amber-500 text-white flex items-center gap-1 ml-auto">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2"/></svg>
         Vị trí của tôi
@@ -120,6 +123,11 @@
       <button id="satelliteBtn" title="Chế độ vệ tinh" class="btn-press absolute right-3 top-3 z-[850] w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center border border-moss-100">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-moss-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.34V5a3 3 0 0 0 3 3v0a2 2 0 0 1 2 2v0a2 2 0 0 0 2 2h1.5a2.5 2.5 0 0 1 2.5 2.5v0"/><path d="M15 19v-1a3 3 0 0 0-3-3v0"/><circle cx="12" cy="12" r="9"/></svg>
       </button>
+      <div class="absolute left-3 bottom-3 z-[850] bg-white/95 rounded-xl shadow-md px-3 py-2 text-[11px] space-y-1 border border-moss-100">
+        <div class="flex items-center gap-1.5"><span>✅</span> Hoàn thành</div>
+        <div class="flex items-center gap-1.5"><span>🛠️</span> Đang xử lý (1 phần)</div>
+        <div class="flex items-center gap-1.5"><span>⏳</span> Còn lại</div>
+      </div>
     </section>
 
     <!-- List view -->
@@ -132,6 +140,25 @@
     </section>
 
   </main>
+</div>
+
+<!-- Status update modal -->
+<div id="statusModal" class="fixed inset-0 z-[3000] hidden items-center justify-center bg-black/40 px-4">
+  <div class="bg-white rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl">
+    <div class="p-4 border-b border-gray-100">
+      <div class="font-bold text-[15px] text-ink">🔄 Cập nhật trạng thái tủ</div>
+      <p class="text-[12px] text-gray-500 mt-1 leading-snug">Dán danh sách <b>S/N các tủ CÒN LẠI</b> (chưa hoàn thành), mỗi mã một dòng. Những tủ không có trong danh sách sẽ được tính là <b>đã hoàn thành ✅</b>.</p>
+    </div>
+    <div class="p-4 overflow-y-auto">
+      <textarea id="remainInput" class="w-full h-56 text-[12px] font-mono border border-gray-200 rounded-xl p-2.5 outline-none focus:border-moss-400" spellcheck="false" placeholder="BSS-..."></textarea>
+      <div id="remainStat" class="text-[11.5px] text-gray-500 mt-2"></div>
+    </div>
+    <div class="p-4 border-t border-gray-100 flex gap-2">
+      <button id="remainReset" class="text-[12.5px] font-semibold py-2.5 px-3 rounded-xl bg-gray-100 text-gray-600">Mặc định</button>
+      <button id="remainCancel" class="text-[12.5px] font-semibold py-2.5 px-3 rounded-xl bg-gray-100 text-gray-600">Đóng</button>
+      <button id="remainApply" class="flex-1 text-[13px] font-semibold py-2.5 rounded-xl bg-moss-700 text-white">Áp dụng</button>
+    </div>
+  </div>
 </div>
 
 <!-- Toast -->
@@ -151,6 +178,34 @@ let map, clusterGroup;
 let streetLayer, satelliteLayer;
 let isSatellite = false;
 const markerByCode = {};
+
+/* ============ 2b. TRẠNG THÁI TỦ (theo S/N còn lại) ============ */
+/* 👉 Danh sách S/N các tủ CÒN LẠI (chưa hoàn thành). Sửa rồi push lại để cập nhật lâu dài;
+   hoặc bấm nút "Cập nhật" trên app để sửa nhanh (lưu trên trình duyệt này). */
+const DEFAULT_REMAINING = ["BSS-255041000203","BSS-254941000597","BSS-254441000068","BSS-255041000258","BSS-255041000325","BSS-254641000155","BSS-254641000281","BSS-254941002316","BSS-255241020356","BSS-255041000236","BSS-254741000283","BSS-254941000596","BSS-255141021993","BSS-26031641024162","BSS-255241022511","BSS-255241021472","BSS-26031641023908","BSS-255041001356","BSS-254941000033","BSS-255041001335","BSS-254941001282","BSS-254641022730","BSS-255041000223","BSS-255041001504","BSS-255241020470","BSS-254841000708","BSS-254841000570","BSS-254841000637","BSS-254741000912","BSS-254841000020","BSS-254841000032","BSS-254941002036","BSS-255241021775","BSS-255141020496","BSS-255141021119","BSS-255141020225","BSS-255141020912","BSS-255241022607","BSS-254641025428","BSS-26020141020598","BSS-26020141020846","BSS-26020141020856","BSS-26031641021117","BSS-254941001816","BSS-26031641021592","BSS-26020141021600","BSS-26031641000844","BSS-255241021359","BSS-255041001447","BSS-255141020374","BSS-26031641021937"];
+const LS_KEY = 'tho_remaining_v1';
+function loadRemaining(){
+  try { const raw = localStorage.getItem(LS_KEY);
+    if (raw){ const a=JSON.parse(raw); if(Array.isArray(a)) return new Set(a.map(x=>String(x).trim()).filter(Boolean)); }
+  } catch(e){}
+  return new Set(DEFAULT_REMAINING);
+}
+function saveRemaining(set){ try{ localStorage.setItem(LS_KEY, JSON.stringify([...set])); }catch(e){} }
+let remainingSet = loadRemaining();
+function computeStatus(){
+  stations.forEach(s => {
+    const cabs = s.cabs || [];
+    if (!cabs.length){ s._done = s.count||0; s._remain = 0; s._status='done'; return; }
+    let remain=0; cabs.forEach(sn=>{ if(remainingSet.has(String(sn).trim())) remain++; });
+    s._remain = remain; s._done = cabs.length - remain;
+    s._status = remain===0 ? 'done' : (s._done>0 ? 'partial' : 'pending');
+  });
+}
+function statusMeta(st){
+  if (st==='done')    return { label:'Hoàn thành', emoji:'✅', color:'#16a34a', bg:'bg-green-50', text:'text-green-700', ring:'ring-green-200', badgeBg:'#dcfce7' };
+  if (st==='partial') return { label:'Đang xử lý', emoji:'🛠️', color:'#ea580c', bg:'bg-amber-50', text:'text-amber-700', ring:'ring-amber-200', badgeBg:'#ffedd5' };
+  return { label:'Còn lại', emoji:'⏳', color:'#dc2626', bg:'bg-red-50', text:'text-red-700', ring:'ring-red-200', badgeBg:'#fee2e2' };
+}
 
 /* ============ 3. HELPERS ============ */
 function stripDiacritics(str){
@@ -224,8 +279,8 @@ function initMap(){
   document.getElementById('mapLoading').remove();
 }
 
-function makeIcon(type){
-  const meta = typeMeta(type);
+function makeIcon(s){
+  const meta = statusMeta(s._status);
   return L.divIcon({
     html: `<div class="station-marker" style="width:30px;height:30px;background:${meta.color};">${meta.emoji}</div>`,
     className: '',
@@ -236,17 +291,22 @@ function makeIcon(type){
 }
 
 function popupHtml(s){
-  const meta = typeMeta(s.type);
+  const meta = statusMeta(s._status);
+  const cabs = s.cabs || [];
+  const cabList = cabs.map(sn => {
+    const done = !remainingSet.has(String(sn).trim());
+    return `<div class="flex items-center gap-1.5 text-[11px] ${done?'text-green-700':'text-red-600'}"><span>${done?'✅':'⏳'}</span><span class="font-mono">${sn}</span></div>`;
+  }).join('');
   return `
     <div class="p-3.5">
-      <div class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5" style="background:${s.type==='swap'?'#fff3e0':'#e9f4ee'};color:${meta.color}">
+      <div class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5" style="background:${meta.badgeBg};color:${meta.color}">
         ${meta.emoji} ${meta.label}
       </div>
       <div class="text-xs text-gray-400 font-medium">${s.code}</div>
       <div class="font-bold text-[14px] leading-snug text-ink mt-0.5">${s.name || '(Chưa có tên)'}</div>
       <div class="text-[12.5px] text-gray-500 mt-1 leading-snug">${s.address || ''}</div>
-      <div class="text-[11.5px] text-gray-400 mt-1 font-medium">${s.ward?('📍 '+s.ward+' · '):''}🔋 ${s.count} tủ</div>
-      ${(s.cabs&&s.cabs.length)?`<div class="text-[11px] text-gray-400 mt-1 leading-snug break-words">Tủ: ${s.cabs.join(', ')}</div>`:''}
+      <div class="text-[11.5px] text-gray-500 mt-1 font-medium">${s.ward?('📍 '+s.ward+' · '):''}✅ ${s._done}/${s.count} tủ xong${s._remain?(` · <span class="text-red-600">⏳ ${s._remain} còn lại</span>`):''}</div>
+      ${cabs.length?`<div class="mt-1.5 border-t border-gray-100 pt-1.5 space-y-0.5 max-h-28 overflow-y-auto pr-1">${cabList}</div>`:''}
       <a href="${gmapsUrl(s.lat,s.lng)}" target="_blank" rel="noopener"
         class="mt-3 flex items-center justify-center gap-1.5 w-full text-white text-[13px] font-semibold py-2 rounded-lg"
         style="background:${meta.color}">
@@ -262,7 +322,7 @@ function rebuildMarkers(){
   const filtered = getFilteredStations();
   filtered.forEach(s => {
     if (typeof s.lat !== 'number' || typeof s.lng !== 'number') return;
-    const marker = L.marker([s.lat, s.lng], { icon: makeIcon(s.type) });
+    const marker = L.marker([s.lat, s.lng], { icon: makeIcon(s) });
     marker.bindPopup(popupHtml(s));
     marker.stationCode = s.code;
     markerByCode[s.code] = marker;
@@ -284,8 +344,10 @@ function focusStation(code){
 
 /* ============ 5. FILTER / SEARCH ============ */
 function getFilteredStations(){
+  computeStatus();
   let list = stations.filter(s => typeof s.lat === 'number' && typeof s.lng === 'number');
-  if (activeFilter !== 'all') list = list.filter(s => s.type === activeFilter);
+  if (activeFilter === 'done') list = list.filter(s => s._status === 'done');
+  else if (activeFilter === 'pending') list = list.filter(s => s._status !== 'done');
   if (searchTerm){
     const q = stripDiacritics(searchTerm);
     list = list.filter(s => stripDiacritics(s.code).includes(q) || stripDiacritics(s.name).includes(q) || stripDiacritics(s.address).includes(q));
@@ -315,7 +377,7 @@ function renderList(){
   empty.classList.remove('flex');
 
   container.innerHTML = list.map(s => {
-    const meta = typeMeta(s.type);
+    const meta = statusMeta(s._status);
     return `
     <div class="fade-in bg-white rounded-2xl p-3.5 shadow-sm ring-1 ${meta.ring} flex flex-col gap-2" data-code="${s.code}">
       <div class="flex items-start justify-between gap-2">
@@ -327,6 +389,7 @@ function renderList(){
           <div class="text-[11px] text-gray-400 font-medium mt-1">${s.code}</div>
           <div class="font-bold text-[14.5px] text-ink leading-snug mt-0.5">${s.name || '(Chưa có tên)'}</div>
           <div class="text-[12.5px] text-gray-500 leading-snug mt-0.5">${s.address || ''}</div>
+          <div class="text-[11.5px] mt-1 font-medium"><span class="text-green-700">✅ ${s._done}/${s.count} tủ xong</span>${s._remain?` · <span class="text-red-600">⏳ ${s._remain} còn lại</span>`:''}</div>
         </div>
       </div>
       <div class="flex gap-2 mt-0.5">
@@ -397,11 +460,14 @@ clearSearchBtn.addEventListener('click', () => {
 });
 
 function updateSummary(){
+  computeStatus();
   const list = getFilteredStations();
-  const charging = stations.filter(s=>s.type==='charging').length;
-  const swap = stations.filter(s=>s.type==='swap').length;
+  let totCab=0, doneCab=0;
+  stations.forEach(s=>{ totCab += (s.count||0); doneCab += (s._done||0); });
+  const remainCab = totCab - doneCab;
+  const doneStations = stations.filter(s=>s._status==='done').length;
   document.getElementById('statSummary').textContent =
-    `${list.length}/${stations.length} trạm hiển thị · ⚡ ${charging} trạm sạc · 🔋 ${swap} trạm đổi pin`;
+    `${list.length}/${stations.length} trạm · ✅ ${doneCab}/${totCab} tủ xong · ⏳ ${remainCab} còn lại · 🏁 ${doneStations} trạm hoàn tất`;
 }
 
 /* ============ 8. GEOLOCATION ============ */
@@ -546,6 +612,36 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   };
   reader.readAsBinaryString(file);
   e.target.value = '';
+});
+
+/* ============ 9b. STATUS UPDATE MODAL ============ */
+const statusModal = document.getElementById('statusModal');
+function parseRemainInput(){
+  return document.getElementById('remainInput').value.split(/[\n,;\s]+/).map(x=>x.trim()).filter(Boolean);
+}
+function updateRemainStat(){
+  const n = new Set(parseRemainInput()).size;
+  document.getElementById('remainStat').textContent = `Danh sách hiện có ${n} tủ còn lại.`;
+}
+function openStatusModal(){
+  document.getElementById('remainInput').value = [...remainingSet].join('\n');
+  updateRemainStat();
+  statusModal.classList.remove('hidden'); statusModal.classList.add('flex');
+}
+function closeStatusModal(){ statusModal.classList.add('hidden'); statusModal.classList.remove('flex'); }
+document.getElementById('statusBtn').addEventListener('click', openStatusModal);
+document.getElementById('remainCancel').addEventListener('click', closeStatusModal);
+statusModal.addEventListener('click', e=>{ if(e.target===statusModal) closeStatusModal(); });
+document.getElementById('remainInput').addEventListener('input', updateRemainStat);
+document.getElementById('remainReset').addEventListener('click', ()=>{
+  document.getElementById('remainInput').value = DEFAULT_REMAINING.join('\n'); updateRemainStat();
+});
+document.getElementById('remainApply').addEventListener('click', ()=>{
+  remainingSet = new Set(parseRemainInput());
+  saveRemaining(remainingSet);
+  rebuildMarkers(); if(currentTab==='list') renderList(); updateSummary();
+  closeStatusModal();
+  showToast(`Đã cập nhật: ${remainingSet.size} tủ còn lại`);
 });
 
 /* ============ 10. INIT ============ */
